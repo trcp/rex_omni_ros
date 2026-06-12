@@ -1,10 +1,10 @@
 # Parameters for the rex_omni node (ROS1; loaded into the node's private
 # namespace by launch/rex_omni.launch). Keep in sync with rex_omni_ros2.yaml.
-model_path: "IDEA-Research/Rex-Omni"
+model_path: "IDEA-Research/Rex-Omni-AWQ"
 gpu_memory_utilization: 0.8
 max_model_len: 4096
-min_pixels: 12544    # 16 * 28 * 28
-max_pixels: 2007040  # 2560 * 28 * 28
+min_pixels: 12544 # 16 * 28 * 28
+max_pixels: 2007040 # 2560 * 28 * 28
 max_tokens: 4096
 temperature: 0.0
 top_p: 0.8

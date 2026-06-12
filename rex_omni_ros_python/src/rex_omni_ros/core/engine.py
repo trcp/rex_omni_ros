@@ -48,6 +48,8 @@ class EngineConfig:
     quantization: str = ""  # e.g. "awq"; empty selects no explicit quantization
     dtype: str = "auto"
     enforce_eager: bool = False
+    # Passed through to vllm.LLM verbatim (e.g. speculative_config).
+    extra_llm_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -112,6 +114,7 @@ class RexOmniEngine:
                 "min_pixels": config.min_pixels,
                 "max_pixels": config.max_pixels,
             },
+            **config.extra_llm_kwargs,
         )
         self._tokenizer = self._llm.get_tokenizer()
         self._sampling_params = SamplingParams(
