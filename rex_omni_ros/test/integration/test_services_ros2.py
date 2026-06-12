@@ -195,6 +195,33 @@ def test_unsupported_encoding_reports_error(client_node):
     assert "encoding" in response.message
 
 
+def test_debug_image_published_while_subscribed(client_node):
+    import rclpy
+    from rex_omni_msgs.srv import Detect
+    from sensor_msgs.msg import Image
+
+    received = []
+    subscription = client_node.create_subscription(
+        Image, "/rex_omni/debug_image", received.append, 1
+    )
+    try:
+        request = Detect.Request(image=make_image_msg(), categories=["person"])
+        # The node renders only when it sees a subscriber; retry while DDS
+        # discovery completes.
+        for _ in range(20):
+            call(client_node, Detect, "/rex_omni/detect", request)
+            rclpy.spin_once(client_node, timeout_sec=0.5)
+            if received:
+                break
+        assert received, "no debug image arrived"
+        image = received[0]
+        assert image.encoding == "rgb8"
+        assert (image.width, image.height) == (640, 480)
+        assert image.header.frame_id == FRAME_ID
+    finally:
+        client_node.destroy_subscription(subscription)
+
+
 def test_sleep_and_wake_up(client_node):
     from std_srvs.srv import Trigger
 

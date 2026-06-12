@@ -22,6 +22,8 @@ from rex_omni_ros.core.tasks import (
 )
 
 LogFunction = Callable[[str], None]
+# (request image, inference result, request image header) -> None
+ResultCallback = Callable[[Any, InferenceResult, Any], None]
 
 _DETECT_VARIANTS = {0: TaskType.DETECTION, 1: TaskType.GUI_GROUNDING}
 _POINT_VARIANTS = {0: TaskType.POINTING, 1: TaskType.GUI_POINTING}
@@ -36,10 +38,16 @@ _TEXT_VARIANTS = {
 class RexOmniHandlers:
     """Maps the five rex_omni_msgs services onto an :class:`Engine`."""
 
-    def __init__(self, engine: Engine, log_error: LogFunction | None = None) -> None:
+    def __init__(
+        self,
+        engine: Engine,
+        log_error: LogFunction | None = None,
+        on_result: ResultCallback | None = None,
+    ) -> None:
         self._engine = engine
         self._lock = threading.Lock()  # vLLM is not safe for concurrent calls
         self._log_error = log_error or (lambda message: None)
+        self._on_result = on_result
 
     @staticmethod
     def _select_image_msg(request: Any) -> Any:
@@ -83,6 +91,11 @@ class RexOmniHandlers:
             return None
         response.success = True
         response.inference_time = float(result.inference_time)
+        if self._on_result is not None:
+            try:
+                self._on_result(image, result, image_msg.header)
+            except Exception as error:  # noqa: BLE001 - reporting is best-effort
+                self._log_error(f"result callback failed: {error}")
         return result
 
     def _switch_power_state(

@@ -148,6 +148,31 @@ def test_unsupported_encoding_reports_error(services):
     assert "encoding" in response.message
 
 
+def test_debug_image_published_while_subscribed(services):
+    import rospy
+    from rex_omni_msgs.srv import Detect
+    from sensor_msgs.msg import Image
+
+    received = []
+    subscriber = rospy.Subscriber("/rex_omni/debug_image", Image, received.append)
+    try:
+        detect = proxy(Detect, "/rex_omni/detect")
+        # The node renders only when it sees a subscriber; retry while the
+        # TCPROS connection is established.
+        for _ in range(20):
+            detect(image=make_image_msg(), categories=["person"], variant=0)
+            rospy.sleep(0.3)
+            if received:
+                break
+        assert received, "no debug image arrived"
+        image = received[0]
+        assert image.encoding == "rgb8"
+        assert (image.width, image.height) == (640, 480)
+        assert image.header.frame_id == FRAME_ID
+    finally:
+        subscriber.unregister()
+
+
 def test_sleep_and_wake_up(services):
     from std_srvs.srv import Trigger
 

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import functools
+from typing import Any
 
+from PIL import Image as PILImage
 from std_srvs.srv import Trigger
 
 from rex_omni_msgs.srv import (
@@ -13,10 +15,17 @@ from rex_omni_msgs.srv import (
     Point,
     RecognizeText,
 )
+from rex_omni_ros import conversions
 from rex_omni_ros.compat import RosNode
-from rex_omni_ros.core.engine import Engine, EngineConfig, RexOmniEngine
+from rex_omni_ros.core import visualization
+from rex_omni_ros.core.engine import (
+    Engine,
+    EngineConfig,
+    InferenceResult,
+    RexOmniEngine,
+)
 from rex_omni_ros.core.mock import MockEngine
-from rex_omni_ros.handlers import RexOmniHandlers
+from rex_omni_ros.handlers import ResultCallback, RexOmniHandlers
 
 
 def _load_config(node: RosNode) -> EngineConfig:
@@ -61,6 +70,30 @@ def _create_engine(node: RosNode, config: EngineConfig) -> Engine:
     return RexOmniEngine(config)
 
 
+def _make_debug_image_publisher(node: RosNode) -> ResultCallback | None:
+    """A result callback publishing annotated images on ``~debug_image``.
+
+    Rendering is skipped while the topic has no subscribers, so the default-on
+    publisher costs nothing in normal operation.
+    """
+    if not bool(node.get_param("publish_debug_image", True)):
+        return None
+    from sensor_msgs.msg import Image
+
+    publisher = node.create_publisher(Image, "debug_image")
+
+    def publish(image: PILImage.Image, result: InferenceResult, header: Any) -> None:
+        if publisher.subscriber_count == 0:
+            return
+        message = conversions.pil_to_image_msg(
+            visualization.render_result(image, result)
+        )
+        message.header = header
+        publisher.publish(message)
+
+    return publish
+
+
 def main() -> None:
     node = RosNode("rex_omni")
     config = _load_config(node)
@@ -69,7 +102,11 @@ def main() -> None:
     node.log_info(f"loading model {config.model_path} (this may take a while)...")
     engine.start()
 
-    handlers = RexOmniHandlers(engine, log_error=node.log_error)
+    handlers = RexOmniHandlers(
+        engine,
+        log_error=node.log_error,
+        on_result=_make_debug_image_publisher(node),
+    )
     services = [
         (Detect, "detect", handlers.handle_detect),
         (Point, "point", handlers.handle_point),

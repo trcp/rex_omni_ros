@@ -11,23 +11,45 @@ Unified semantics:
 * ``create_service(srv_type, name, handler)`` registers a private service.
   ``handler`` always has the rospy-style signature ``handler(request) ->
   response`` and must return an instance of ``response_class(srv_type)``.
+* ``create_publisher(msg_type, name)`` registers a private topic publisher
+  and returns a :class:`Publisher`.
 * ``spin()`` blocks until shutdown and releases resources afterwards.
 """
 
 from __future__ import annotations
 
 import os
-from typing import Any, Callable, List, TypeVar, Union, cast
+from typing import Any, Callable, List, Protocol, TypeVar, Union, cast
 
 ParamValue = Union[bool, int, float, str, List[str]]
 ParamT = TypeVar("ParamT", bound=ParamValue)
 ServiceHandler = Callable[[Any], Any]
+
+
+class Publisher(Protocol):
+    """Minimal topic publisher shared by both ROS versions."""
+
+    @property
+    def subscriber_count(self) -> int: ...
+
+    def publish(self, message: Any) -> None: ...
 
 ROS_VERSION = int(os.environ.get("ROS_VERSION", "0"))
 
 
 if ROS_VERSION == 1:
     import rospy
+
+    class _RospyPublisher:
+        def __init__(self, publisher: Any) -> None:
+            self._publisher = publisher
+
+        @property
+        def subscriber_count(self) -> int:
+            return int(self._publisher.get_num_connections())
+
+        def publish(self, message: Any) -> None:
+            self._publisher.publish(message)
 
     class RosNode:
         """rospy-backed implementation."""
@@ -52,6 +74,11 @@ if ROS_VERSION == 1:
         ) -> None:
             rospy.Service("~" + name, srv_type, handler)
 
+        def create_publisher(self, msg_type: Any, name: str) -> Publisher:
+            return _RospyPublisher(
+                rospy.Publisher("~" + name, msg_type, queue_size=1)
+            )
+
         def call_service(
             self, srv_type: Any, name: str, request: Any, timeout: float = 60.0
         ) -> Any:
@@ -73,6 +100,17 @@ if ROS_VERSION == 1:
 elif ROS_VERSION == 2:
     import rclpy
     import rclpy.node
+
+    class _RclpyPublisher:
+        def __init__(self, publisher: Any) -> None:
+            self._publisher = publisher
+
+        @property
+        def subscriber_count(self) -> int:
+            return int(self._publisher.get_subscription_count())
+
+        def publish(self, message: Any) -> None:
+            self._publisher.publish(message)
 
     class RosNode:  # type: ignore[no-redef]
         """rclpy-backed implementation."""
@@ -100,6 +138,11 @@ elif ROS_VERSION == 2:
                 return handler(request)
 
             self._node.create_service(srv_type, "~/" + name, callback)
+
+        def create_publisher(self, msg_type: Any, name: str) -> Publisher:
+            return _RclpyPublisher(
+                self._node.create_publisher(msg_type, "~/" + name, 1)
+            )
 
         def call_service(
             self, srv_type: Any, name: str, request: Any, timeout: float = 60.0

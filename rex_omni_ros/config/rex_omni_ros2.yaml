@@ -16,3 +16,4 @@ rex_omni:
         warmup: true
         compile_vit: true # torch.compile the ViT encoder: ~6% faster prefill, ~+35 s load time
         enable_sleep_mode: true
+        publish_debug_image: true # annotated results on ~debug_image; rendered only while subscribed
