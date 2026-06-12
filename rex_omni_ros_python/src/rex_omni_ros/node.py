@@ -42,6 +42,8 @@ def _load_config(node: RosNode) -> EngineConfig:
         quantization=str(node.get_param("quantization", defaults.quantization)),
         dtype=str(node.get_param("dtype", defaults.dtype)),
         enforce_eager=bool(node.get_param("enforce_eager", defaults.enforce_eager)),
+        warmup=bool(node.get_param("warmup", defaults.warmup)),
+        compile_vit=bool(node.get_param("compile_vit", defaults.compile_vit)),
     )
 
 

@@ -1,14 +1,17 @@
 # Parameters for the rex_omni node (ROS2). Keep in sync with rex_omni_ros1.yaml.
 rex_omni:
     ros__parameters:
-        model_path: "IDEA-Research/Rex-Omni-AWQ"
-        gpu_memory_utilization: 0.8
+        model_path: "0xNOY/Rex-Omni-AWQ-QLMHead"
+        gpu_memory_utilization: 0.0
         max_model_len: 4096
-        min_pixels: 12544 # 16 * 28 * 28
-        max_pixels: 2007040 # 2560 * 28 * 28
+        # pixels must be a multiple of 28^2
+        min_pixels: 12544
+        max_pixels: 401408 # higher values higher accuracy and slower prefill
         max_tokens: 4096
         temperature: 0.0
         top_p: 0.8
         top_k: 1
         repetition_penalty: 1.05
         enable_confidence: true
+        warmup: true
+        compile_vit: true # torch.compile the ViT encoder: ~6% faster prefill, ~+35 s load time
