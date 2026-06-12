@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main, devel]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: Lint, typecheck, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: prefix-dev/setup-pixi@v0.9.6
+        with:
+          environments: ci
+          cache: true
+      - run: pixi run -e ci lint
+      - run: pixi run -e ci typecheck
+      - run: pixi run -e ci test-core
+
+  # Builds the workspace and exercises the services end to end with the
+  # mock backend; the *-ci environments carry ROS but not vLLM.
+  integration:
+    name: Integration (${{ matrix.ros }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ros: [ros1, ros2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: prefix-dev/setup-pixi@v0.9.6
+        with:
+          environments: ${{ matrix.ros }}-ci
+          cache: true
+      - run: pixi run -e ${{ matrix.ros }}-ci test-integration

@@ -5,12 +5,6 @@ name = "rex_omni_ros"
 platforms = ["linux-64"]
 version = "0.1.0"
 
-[system-requirements]
-cuda = "12.6"
-
-# vLLM is installed from PyPI (not conda-forge) so that its CUDA runtime is
-# self-contained in nvidia-* wheels and cannot clash with RoboStack's native
-# library pins (libprotobuf etc.).
 [dependencies]
 python = "3.12.*"
 numpy = ">=2,<2.4"  # >=2: vllm 0.22 (opencv-headless); <2.4: mistral-common
@@ -26,7 +20,16 @@ pytest = "*"
 ruff = "*"
 mypy = "*"
 
-[pypi-dependencies]
+# The inference stack lives in its own feature so the *-ci environments can
+# run lint/tests and the mock-backend node without downloading vLLM's CUDA
+# wheels (GitHub runners have no GPU and little disk).
+[feature.vllm.system-requirements]
+cuda = "12.6"
+
+# vLLM is installed from PyPI (not conda-forge) so that its CUDA runtime is
+# self-contained in nvidia-* wheels and cannot clash with RoboStack's native
+# library pins (libprotobuf etc.).
+[feature.vllm.pypi-dependencies]
 vllm = ">=0.22,<0.23"
 # transformers 5.x rebuilds the slow tokenizer with token ids beyond the
 # Rex-Omni embedding table; 4.x keeps the correct training-time layout.
@@ -40,8 +43,13 @@ test-core = "pytest rex_omni_ros/test/unit -v"
 test-gpu = "pytest rex_omni_ros/test/gpu -v -m gpu"
 
 [environments]
-ros1 = ["ros1"]
-ros2 = ["ros2"]
+default = ["vllm"]
+ros1 = ["ros1", "vllm"]
+ros2 = ["ros2", "vllm"]
+# CI variants: identical but without the vllm feature (mock backend only).
+ci = []
+ros1-ci = ["ros1"]
+ros2-ci = ["ros2"]
 
 [feature.ros1]
 channels = ["https://prefix.dev/robostack-noetic", "conda-forge"]
