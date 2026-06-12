@@ -27,6 +27,9 @@ def _ref_block(category: str, coords: str) -> str:
 class MockEngine:
     """Engine double; satisfies :class:`rex_omni_ros.core.engine.Engine`."""
 
+    def __init__(self) -> None:
+        self.sleeping = False
+
     def start(self) -> None:
         pass
 
@@ -34,7 +37,14 @@ class MockEngine:
     def started(self) -> bool:
         return True
 
+    def sleep(self) -> None:
+        self.sleeping = True
+
+    def wake_up(self) -> None:
+        self.sleeping = False
+
     def infer(self, request: InferenceRequest) -> InferenceResult:
+        self.sleeping = False  # mirror the real engine's wake-on-infer
         start_time = time.monotonic()
         width, height = request.image.size
         raw_output = self._render_output(request)

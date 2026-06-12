@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import math
 import os
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -59,6 +60,7 @@ class EngineConfig:
     enforce_eager: bool = False
     warmup: bool = True
     compile_vit: bool = False
+    enable_sleep_mode: bool = True
     # Passed through to vllm.LLM verbatim (e.g. speculative_config).
     extra_llm_kwargs: dict[str, Any] = field(default_factory=dict)
 
@@ -88,6 +90,10 @@ class Engine(Protocol):
     def start(self) -> None: ...
 
     def infer(self, request: InferenceRequest) -> InferenceResult: ...
+
+    def sleep(self) -> None: ...
+
+    def wake_up(self) -> None: ...
 
 
 def _checkpoint_weight_nbytes(model_path: str) -> int:
@@ -177,6 +183,22 @@ def _patch_marlin_lm_head_support() -> None:
     awq_marlin.check_marlin_supports_layer = patched
 
 
+def _vram_usage_suffix() -> str:
+    """Current GPU memory usage as a log suffix, or '' when unavailable.
+
+    Reads torch from sys.modules instead of importing it so this stays free
+    in unit tests; after start() torch is always loaded.
+    """
+    torch = sys.modules.get("torch")
+    if torch is None:
+        return ""
+    try:
+        free, total = torch.cuda.mem_get_info()
+    except Exception:  # noqa: BLE001 - logging only, never fail the call
+        return ""
+    return f" (GPU: {(total - free) / GIB:.2f}/{total / GIB:.2f} GiB used)"
+
+
 class RexOmniEngine:
     """vLLM-backed engine. Not thread-safe; serialize calls to :meth:`infer`."""
 
@@ -185,6 +207,7 @@ class RexOmniEngine:
         self._llm: Any = None
         self._tokenizer: Any = None
         self._sampling_params: Any = None
+        self._sleeping = False
 
     def start(self) -> None:
         """Load the model. Takes tens of seconds; call once at node startup."""
@@ -226,6 +249,7 @@ class RexOmniEngine:
             quantization=cast(Any, config.quantization or None),
             dtype=cast(Any, config.dtype),
             enforce_eager=config.enforce_eager,
+            enable_sleep_mode=config.enable_sleep_mode,
             limit_mm_per_prompt={"image": 1},
             mm_processor_kwargs={
                 "min_pixels": config.min_pixels,
@@ -264,9 +288,53 @@ class RexOmniEngine:
     def started(self) -> bool:
         return self._llm is not None
 
+    @property
+    def sleeping(self) -> bool:
+        return self._sleeping
+
+    def sleep(self) -> None:
+        """Offload the weights to host RAM and drop the KV cache (vLLM sleep
+        level 1), releasing the model's VRAM for other processes. The CUDA
+        context (and CUDA graphs, unless enforce_eager) stays resident.
+        Idempotent; needs free host RAM about the size of the weights."""
+        if not self.started:
+            raise RuntimeError("engine not started; call start() first")
+        if not self._config.enable_sleep_mode:
+            raise RuntimeError(
+                "sleep mode is disabled; start the node with enable_sleep_mode"
+            )
+        if self._sleeping:
+            return
+        start_time = time.monotonic()
+        self._llm.sleep(level=1)
+        self._sleeping = True
+        logger.info(
+            "model offloaded to host RAM in %.2fs%s",
+            time.monotonic() - start_time,
+            _vram_usage_suffix(),
+        )
+
+    def wake_up(self) -> None:
+        """Restore the weights to VRAM and reallocate the KV cache. Idempotent."""
+        if not self.started:
+            raise RuntimeError("engine not started; call start() first")
+        if not self._sleeping:
+            return
+        start_time = time.monotonic()
+        self._llm.wake_up()
+        self._sleeping = False
+        logger.info(
+            "model restored to VRAM in %.2fs%s",
+            time.monotonic() - start_time,
+            _vram_usage_suffix(),
+        )
+
     def infer(self, request: InferenceRequest) -> InferenceResult:
         if not self.started:
             raise RuntimeError("engine not started; call start() first")
+        if self._sleeping:
+            logger.warning("inference requested while asleep; waking model up")
+            self.wake_up()
 
         start_time = time.monotonic()
         image = request.image.convert("RGB")

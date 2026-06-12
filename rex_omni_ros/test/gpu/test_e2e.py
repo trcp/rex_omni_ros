@@ -74,3 +74,27 @@ def test_pointing(engine, test_image):
     assert any(
         RECT.x0 <= p.x <= RECT.x1 and RECT.y0 <= p.y <= RECT.y1 for p in points
     ), f"point outside target; raw: {result.raw_output!r}"
+
+
+def test_sleep_frees_vram_and_inference_survives_wake(engine, test_image):
+    from rex_omni_ros.core.engine import GIB
+
+    free_awake, _ = torch.cuda.mem_get_info()
+    engine.sleep()
+    free_asleep, _ = torch.cuda.mem_get_info()
+    # The weights alone are several GiB; require a clearly visible drop.
+    freed = free_asleep - free_awake
+    assert freed > 2 * GIB, f"sleep freed only {freed / GIB:.2f} GiB"
+
+    engine.wake_up()
+    result = engine.infer(
+        InferenceRequest(
+            image=test_image,
+            task=TaskType.DETECTION,
+            categories=["red rectangle"],
+        )
+    )
+    boxes = [a.shape for a in result.annotations if isinstance(a.shape, Box)]
+    assert boxes, f"no detections after wake_up; raw: {result.raw_output!r}"
+    best = max(iou(box, RECT) for box in boxes)
+    assert best > 0.5, f"degraded localization after wake_up (IoU {best:.2f})"

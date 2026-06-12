@@ -125,9 +125,7 @@ def test_detect_keypoints(client_node):
     request = DetectKeypoints.Request(
         image=make_image_msg(), category="person", keypoint_type="person"
     )
-    response = call(
-        client_node, DetectKeypoints, "/rex_omni/detect_keypoints", request
-    )
+    response = call(client_node, DetectKeypoints, "/rex_omni/detect_keypoints", request)
     assert response.success, response.message
     (instance,) = response.instances
     assert instance.category == "person"
@@ -168,3 +166,13 @@ def test_unsupported_encoding_reports_error(client_node):
     response = call(client_node, Detect, "/rex_omni/detect", request)
     assert not response.success
     assert "encoding" in response.message
+
+
+def test_sleep_and_wake_up(client_node):
+    from std_srvs.srv import Trigger
+
+    response = call(client_node, Trigger, "/rex_omni/sleep", Trigger.Request())
+    assert response.success, response.message
+
+    response = call(client_node, Trigger, "/rex_omni/wake_up", Trigger.Request())
+    assert response.success, response.message

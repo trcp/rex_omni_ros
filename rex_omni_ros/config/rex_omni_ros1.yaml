@@ -14,3 +14,4 @@ repetition_penalty: 1.05
 enable_confidence: true
 warmup: true
 compile_vit: true # torch.compile the ViT encoder: ~6% faster prefill, ~+30 s load time
+enable_sleep_mode: true

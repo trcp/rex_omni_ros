@@ -12,7 +12,6 @@ import threading
 from typing import Any, Callable
 
 from rex_omni_msgs import msg as msg_module
-
 from rex_omni_ros import conversions
 from rex_omni_ros.core import types
 from rex_omni_ros.core.engine import Engine, InferenceRequest, InferenceResult
@@ -73,6 +72,33 @@ class RexOmniHandlers:
         response.inference_time = float(result.inference_time)
         return result
 
+    def _switch_power_state(
+        self, response_cls: Any, action: Callable[[], None], success_message: str
+    ) -> Any:
+        """Run an engine sleep/wake transition as a std_srvs/Trigger call."""
+        response = response_cls()
+        try:
+            with self._lock:
+                action()
+        except Exception as error:  # noqa: BLE001 - reported via the response
+            self._log_error(f"{action.__name__} request failed: {error}")
+            response.success = False
+            response.message = str(error)
+            return response
+        response.success = True
+        response.message = success_message
+        return response
+
+    def handle_sleep(self, request: Any, response_cls: Any) -> Any:
+        return self._switch_power_state(
+            response_cls, self._engine.sleep, "model offloaded to host RAM"
+        )
+
+    def handle_wake_up(self, request: Any, response_cls: Any) -> Any:
+        return self._switch_power_state(
+            response_cls, self._engine.wake_up, "model restored to VRAM"
+        )
+
     def handle_detect(self, request: Any, response_cls: Any) -> Any:
         response = response_cls()
         task = _DETECT_VARIANTS.get(request.variant)
@@ -107,9 +133,7 @@ class RexOmniHandlers:
             ]
         return response
 
-    def handle_detect_with_visual_prompt(
-        self, request: Any, response_cls: Any
-    ) -> Any:
+    def handle_detect_with_visual_prompt(self, request: Any, response_cls: Any) -> Any:
         response = response_cls()
         boxes = [conversions.box_msg_to_core(b) for b in request.reference_boxes]
         result = self._run(

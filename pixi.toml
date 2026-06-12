@@ -53,6 +53,7 @@ ros-noetic-rospy = "*"
 ros-noetic-message-generation = "*"
 ros-noetic-message-runtime = "*"
 ros-noetic-std-msgs = "*"
+ros-noetic-std-srvs = "*"
 ros-noetic-sensor-msgs = "*"
 
 # -DPYTHON_EXECUTABLE / -DPython*_EXECUTABLE pin CMake to the environment's
@@ -72,6 +73,7 @@ ros-humble-rclpy = "*"
 ros-humble-rosidl-default-generators = "*"
 ros-humble-rosidl-default-runtime = "*"
 ros-humble-std-msgs = "*"
+ros-humble-std-srvs = "*"
 ros-humble-sensor-msgs = "*"
 ros-humble-ament-cmake = "*"
 

@@ -80,9 +80,7 @@ def test_detect_with_visual_prompt(services):
     from rex_omni_msgs.msg import BoundingBox
     from rex_omni_msgs.srv import DetectWithVisualPrompt
 
-    response = proxy(
-        DetectWithVisualPrompt, "/rex_omni/detect_with_visual_prompt"
-    )(
+    response = proxy(DetectWithVisualPrompt, "/rex_omni/detect_with_visual_prompt")(
         image=make_image_msg(),
         reference_boxes=[BoundingBox(x0=10.0, y0=10.0, x1=100.0, y1=100.0)],
     )
@@ -121,3 +119,13 @@ def test_unsupported_encoding_reports_error(services):
     )
     assert not response.success
     assert "encoding" in response.message
+
+
+def test_sleep_and_wake_up(services):
+    from std_srvs.srv import Trigger
+
+    response = proxy(Trigger, "/rex_omni/sleep")()
+    assert response.success, response.message
+
+    response = proxy(Trigger, "/rex_omni/wake_up")()
+    assert response.success, response.message

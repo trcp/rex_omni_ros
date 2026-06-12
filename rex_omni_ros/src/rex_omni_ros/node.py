@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import functools
 
+from std_srvs.srv import Trigger
+
 from rex_omni_msgs.srv import (
     Detect,
     DetectKeypoints,
@@ -11,7 +13,6 @@ from rex_omni_msgs.srv import (
     Point,
     RecognizeText,
 )
-
 from rex_omni_ros.compat import RosNode
 from rex_omni_ros.core.engine import Engine, EngineConfig, RexOmniEngine
 from rex_omni_ros.core.mock import MockEngine
@@ -44,6 +45,9 @@ def _load_config(node: RosNode) -> EngineConfig:
         enforce_eager=bool(node.get_param("enforce_eager", defaults.enforce_eager)),
         warmup=bool(node.get_param("warmup", defaults.warmup)),
         compile_vit=bool(node.get_param("compile_vit", defaults.compile_vit)),
+        enable_sleep_mode=bool(
+            node.get_param("enable_sleep_mode", defaults.enable_sleep_mode)
+        ),
     )
 
 
@@ -76,6 +80,8 @@ def main() -> None:
         ),
         (DetectKeypoints, "detect_keypoints", handlers.handle_detect_keypoints),
         (RecognizeText, "recognize_text", handlers.handle_recognize_text),
+        (Trigger, "sleep", handlers.handle_sleep),
+        (Trigger, "wake_up", handlers.handle_wake_up),
     ]
     for srv_type, name, handler in services:
         node.create_service(
@@ -85,8 +91,7 @@ def main() -> None:
         )
 
     node.log_info(
-        "rex_omni ready; services: "
-        + ", ".join(name for _, name, _ in services)
+        "rex_omni ready; services: " + ", ".join(name for _, name, _ in services)
     )
     node.spin()
 
