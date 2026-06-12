@@ -47,7 +47,7 @@ ros2 = ["ros2"]
 channels = ["https://prefix.dev/robostack-noetic", "conda-forge"]
 
 [feature.ros1.dependencies]
-ros-noetic-ros-core = "*"  # roscore / rosrun / roslaunch
+ros-noetic-ros-core = "*"
 ros-noetic-catkin = "*"
 ros-noetic-rospy = "*"
 ros-noetic-message-generation = "*"
@@ -61,12 +61,13 @@ ros-noetic-sensor-msgs = "*"
 build = "colcon build --base-paths rex_omni_msgs rex_omni_ros_python --build-base build/ros1 --install-base install/ros1 --merge-install --cmake-args -DCMAKE_BUILD_TYPE=Release -DPYTHON_EXECUTABLE=$CONDA_PREFIX/bin/python -DPython_EXECUTABLE=$CONDA_PREFIX/bin/python -DPython3_EXECUTABLE=$CONDA_PREFIX/bin/python"
 clean = "rm -rf build/ros1 install/ros1 log"
 test-integration = { cmd = "bash tools/test_integration_ros1.sh", depends-on = ["build"] }
+launch-server = { cmd = ". install/ros1/setup.bash && roslaunch rex_omni_ros_python rex_omni.launch", depends-on = ["build"] }
 
 [feature.ros2]
 channels = ["https://prefix.dev/robostack-humble", "conda-forge"]
 
 [feature.ros2.dependencies]
-ros-humble-ros-core = "*"  # ros2 CLI / launch
+ros-humble-ros-core = "*"
 ros-humble-rclpy = "*"
 ros-humble-rosidl-default-generators = "*"
 ros-humble-rosidl-default-runtime = "*"
@@ -78,3 +79,4 @@ ros-humble-ament-cmake = "*"
 build = "colcon build --base-paths rex_omni_msgs rex_omni_ros_python --build-base build/ros2 --install-base install/ros2 --merge-install --cmake-args -DCMAKE_BUILD_TYPE=Release -DPYTHON_EXECUTABLE=$CONDA_PREFIX/bin/python -DPython_EXECUTABLE=$CONDA_PREFIX/bin/python -DPython3_EXECUTABLE=$CONDA_PREFIX/bin/python"
 clean = "rm -rf build/ros2 install/ros2 log"
 test-integration = { cmd = "bash tools/test_integration_ros2.sh", depends-on = ["build"] }
+launch-server = { cmd = ". install/ros2/setup.bash && ros2 launch rex_omni_ros_python rex_omni.launch.py", depends-on = ["build"] }
