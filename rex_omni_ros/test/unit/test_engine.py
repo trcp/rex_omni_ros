@@ -1,5 +1,6 @@
 """Tests for the GPU-less parts of the engine (auto VRAM sizing, sleep/wake)."""
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -15,10 +16,21 @@ from rex_omni_ros.core.engine import (
     RexOmniEngine,
     _checkpoint_weight_nbytes,
     auto_gpu_memory_utilization,
+    kv_cache_bytes_per_token,
 )
 
 WEIGHT_NBYTES = int(3.5 * GIB)  # ≈ the AWQ checkpoint
 TOTAL_VRAM = 24 * GIB
+
+# Attention geometry of Rex-Omni 3B (Qwen2.5-VL style: text keys at top level).
+MODEL_CONFIG = {
+    "model_type": "qwen2_5_vl",
+    "num_hidden_layers": 36,
+    "num_key_value_heads": 2,
+    "num_attention_heads": 16,
+    "hidden_size": 2048,
+}
+REX_OMNI_KV_BYTES_PER_TOKEN = 2 * 36 * 2 * 128 * 2
 
 
 @pytest.fixture
@@ -26,6 +38,7 @@ def checkpoint(tmp_path: Path) -> Path:
     # Sparse files: st_size is what the estimator reads, no disk is used.
     with (tmp_path / "model.safetensors").open("wb") as file:
         file.truncate(WEIGHT_NBYTES)
+    (tmp_path / "config.json").write_text(json.dumps(MODEL_CONFIG))
     return tmp_path
 
 
@@ -48,6 +61,32 @@ def test_weight_nbytes_sums_weight_files(checkpoint: Path) -> None:
 def test_weight_nbytes_rejects_checkpoint_without_weights(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="no weight files"):
         _checkpoint_weight_nbytes(str(tmp_path))
+
+
+def test_kv_cache_bytes_derived_from_config(checkpoint: Path) -> None:
+    assert kv_cache_bytes_per_token(str(checkpoint)) == REX_OMNI_KV_BYTES_PER_TOKEN
+
+
+def test_kv_cache_bytes_reads_nested_text_config(tmp_path: Path) -> None:
+    config = {"model_type": "other_vlm", "text_config": dict(MODEL_CONFIG)}
+    (tmp_path / "config.json").write_text(json.dumps(config))
+
+    assert kv_cache_bytes_per_token(str(tmp_path)) == REX_OMNI_KV_BYTES_PER_TOKEN
+
+
+def test_kv_cache_bytes_prefers_explicit_head_dim(tmp_path: Path) -> None:
+    config = dict(MODEL_CONFIG, head_dim=64)
+    (tmp_path / "config.json").write_text(json.dumps(config))
+
+    assert kv_cache_bytes_per_token(str(tmp_path)) == REX_OMNI_KV_BYTES_PER_TOKEN // 2
+
+
+def test_kv_cache_bytes_rejects_config_without_geometry(tmp_path: Path) -> None:
+    config = {"model_type": "exotic", "num_hidden_layers": 36}
+    (tmp_path / "config.json").write_text(json.dumps(config))
+
+    with pytest.raises(ValueError, match="gpu_memory_utilization"):
+        kv_cache_bytes_per_token(str(tmp_path))
 
 
 def test_auto_utilization_is_a_sane_fraction(checkpoint: Path) -> None:

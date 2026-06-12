@@ -7,6 +7,7 @@ without vLLM installed — unit and integration tests use a fake engine.
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 import os
@@ -25,8 +26,7 @@ logger = logging.getLogger(__name__)
 
 GIB = 1 << 30
 
-# fp16 K and V for 36 layers x 2 KV heads x 128 head dim (Rex-Omni 3B)
-KV_CACHE_BYTES_PER_TOKEN = 2 * 36 * 2 * 128 * 2
+KV_CACHE_DTYPE_BYTES = 2  # vLLM keeps the KV cache in fp16/bf16
 CUDA_GRAPH_BYTES = int(0.55 * GIB)
 BASE_OVERHEAD_BYTES = int(1.5 * GIB)
 VIT_ACTIVATION_BYTES_PER_PIXEL = 36
@@ -119,6 +119,47 @@ def _checkpoint_weight_nbytes(model_path: str) -> int:
     return nbytes
 
 
+def _model_text_config(model_path: str) -> dict[str, Any]:
+    """The text-model section of the model's config.json.
+
+    Qwen2.5-VL-style configs keep the text keys at the top level; other
+    multimodal configs nest them under ``text_config``. Downloads only
+    config.json for Hub ids.
+    """
+    path = Path(model_path)
+    if path.is_dir():
+        config_file = path / "config.json"
+    else:
+        from huggingface_hub import hf_hub_download
+
+        config_file = Path(hf_hub_download(model_path, "config.json"))
+    with config_file.open() as file:
+        config = json.load(file)
+    return cast("dict[str, Any]", config.get("text_config", config))
+
+
+def kv_cache_bytes_per_token(model_path: str) -> int:
+    """Per-token KV cache size in bytes, derived from the model's config.json.
+
+    Raises:
+        ValueError: If config.json lacks the required attention geometry.
+    """
+    text_config = _model_text_config(model_path)
+    try:
+        num_layers = int(text_config["num_hidden_layers"])
+        num_kv_heads = int(text_config["num_key_value_heads"])
+        head_dim = int(
+            text_config.get("head_dim")
+            or text_config["hidden_size"] // text_config["num_attention_heads"]
+        )
+    except KeyError as error:
+        raise ValueError(
+            f"cannot size the KV cache: config.json of {model_path} has no "
+            f"{error} key; set gpu_memory_utilization explicitly"
+        ) from None
+    return 2 * num_layers * num_kv_heads * head_dim * KV_CACHE_DTYPE_BYTES  # K and V
+
+
 def auto_gpu_memory_utilization(config: EngineConfig, total_vram_bytes: int) -> float:
     """The gpu_memory_utilization granting the minimum VRAM `config` needs.
 
@@ -130,7 +171,7 @@ def auto_gpu_memory_utilization(config: EngineConfig, total_vram_bytes: int) -> 
         _checkpoint_weight_nbytes(config.model_path)
         + BASE_OVERHEAD_BYTES
         + config.max_pixels * VIT_ACTIVATION_BYTES_PER_PIXEL
-        + config.max_model_len * KV_CACHE_BYTES_PER_TOKEN
+        + config.max_model_len * kv_cache_bytes_per_token(config.model_path)
     )
     if not config.enforce_eager:
         required += CUDA_GRAPH_BYTES
