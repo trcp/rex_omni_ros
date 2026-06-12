@@ -1,5 +1,6 @@
 # Keypoint (skeleton) detection.
-sensor_msgs/Image image
+sensor_msgs/Image image  # raw input image; leave empty when using compressed_image
+sensor_msgs/CompressedImage compressed_image  # alternative jpeg/png input, used when image is empty
 string category       # object category to detect, e.g. "person", "cat"
 string keypoint_type  # keypoint set: "person" or "animal"
 ---

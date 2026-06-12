@@ -8,6 +8,7 @@ dependency.
 
 from __future__ import annotations
 
+import io
 from typing import Any
 
 import numpy as np
@@ -54,6 +55,39 @@ def image_msg_to_pil(msg: Any) -> PILImage.Image:
     if channels == 1:
         array = array[:, :, 0]
     return PILImage.fromarray(np.ascontiguousarray(array))
+
+
+def compressed_image_msg_to_pil(msg: Any) -> PILImage.Image:
+    """Decode a sensor_msgs/CompressedImage (jpeg, png, ...) into a PIL image.
+
+    image_transport's compressed plugin encodes the source array without
+    channel reordering and records it in the format string (e.g.
+    ``"bgr8; jpeg compressed bgr8"``); BGR(A) data is swapped back to RGB(A).
+
+    Raises:
+        ValueError: If the payload is not a decodable image.
+    """
+    image: PILImage.Image
+    try:
+        image = PILImage.open(io.BytesIO(bytes(msg.data)))
+        image.load()
+    except Exception as error:
+        raise ValueError(
+            f"failed to decode compressed image (format {msg.format!r}): {error}"
+        ) from error
+    if "compressed bgr" in msg.format.lower():
+        array = np.asarray(image)
+        if array.ndim == 3 and array.shape[2] >= 3:
+            channel_order = [2, 1, 0] + list(range(3, array.shape[2]))
+            image = PILImage.fromarray(array[:, :, channel_order])
+    return image
+
+
+def decode_image_msg(msg: Any) -> PILImage.Image:
+    """Decode a sensor_msgs Image or CompressedImage into a PIL image."""
+    if hasattr(msg, "encoding"):
+        return image_msg_to_pil(msg)
+    return compressed_image_msg_to_pil(msg)
 
 
 def pil_to_image_msg(image: PILImage.Image) -> Any:

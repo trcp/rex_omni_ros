@@ -3,7 +3,8 @@ uint8 VARIANT_WORD_BOX=0
 uint8 VARIANT_TEXTLINE_BOX=1
 uint8 VARIANT_POLYGON=2
 
-sensor_msgs/Image image
+sensor_msgs/Image image  # raw input image; leave empty when using compressed_image
+sensor_msgs/CompressedImage compressed_image  # alternative jpeg/png input, used when image is empty
 uint8 variant
 ---
 std_msgs/Header header  # copied from the request image (stamp, frame_id)

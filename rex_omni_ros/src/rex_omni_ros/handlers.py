@@ -41,19 +41,31 @@ class RexOmniHandlers:
         self._lock = threading.Lock()  # vLLM is not safe for concurrent calls
         self._log_error = log_error or (lambda message: None)
 
+    @staticmethod
+    def _select_image_msg(request: Any) -> Any:
+        """The image message carrying the request's pixels (raw wins)."""
+        if len(request.image.data) > 0:
+            return request.image
+        if len(request.compressed_image.data) > 0:
+            return request.compressed_image
+        raise ValueError(
+            "request contains no image data; set image or compressed_image"
+        )
+
     def _run(
         self,
         response: Any,
-        request_image: Any,
+        request: Any,
         task: TaskType,
         categories: list[str] | None = None,
         keypoint_type: str = "",
         visual_prompt_boxes: list[types.Box] | None = None,
     ) -> InferenceResult | None:
         """Run inference, filling error fields on failure."""
-        response.header = request_image.header
         try:
-            image = conversions.image_msg_to_pil(request_image)
+            image_msg = self._select_image_msg(request)
+            response.header = image_msg.header
+            image = conversions.decode_image_msg(image_msg)
             with self._lock:
                 result = self._engine.infer(
                     InferenceRequest(
@@ -107,7 +119,7 @@ class RexOmniHandlers:
             response.message = f"unknown variant {request.variant}"
             return response
         result = self._run(
-            response, request.image, task, categories=list(request.categories)
+            response, request, task, categories=list(request.categories)
         )
         if result is not None:
             response.detections = [
@@ -124,7 +136,7 @@ class RexOmniHandlers:
             response.message = f"unknown variant {request.variant}"
             return response
         result = self._run(
-            response, request.image, task, categories=list(request.categories)
+            response, request, task, categories=list(request.categories)
         )
         if result is not None:
             response.points = [
@@ -139,7 +151,7 @@ class RexOmniHandlers:
         boxes = [conversions.box_msg_to_core(b) for b in request.reference_boxes]
         result = self._run(
             response,
-            request.image,
+            request,
             TaskType.VISUAL_PROMPTING,
             visual_prompt_boxes=boxes,
         )
@@ -155,7 +167,7 @@ class RexOmniHandlers:
         response = response_cls()
         result = self._run(
             response,
-            request.image,
+            request,
             TaskType.KEYPOINT,
             categories=[request.category],
             keypoint_type=request.keypoint_type,
@@ -174,7 +186,7 @@ class RexOmniHandlers:
             response.message = f"unknown variant {request.variant}"
             return response
         task, categories = variant
-        result = self._run(response, request.image, task, categories=categories)
+        result = self._run(response, request, task, categories=categories)
         if result is not None:
             response.regions = [
                 conversions.annotation_to_text_region_msg(a, msg_module)

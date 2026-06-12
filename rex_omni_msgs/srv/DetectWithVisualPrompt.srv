@@ -1,5 +1,6 @@
 # Visual prompting: find all objects similar to the reference boxes.
-sensor_msgs/Image image
+sensor_msgs/Image image  # raw input image; leave empty when using compressed_image
+sensor_msgs/CompressedImage compressed_image  # alternative jpeg/png input, used when image is empty
 BoundingBox[] reference_boxes  # pixel coordinates in the request image
 ---
 std_msgs/Header header  # copied from the request image (stamp, frame_id)

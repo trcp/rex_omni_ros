@@ -2,7 +2,8 @@
 uint8 VARIANT_DETECTION=0
 uint8 VARIANT_GUI_GROUNDING=1
 
-sensor_msgs/Image image
+sensor_msgs/Image image  # raw input image; leave empty when using compressed_image
+sensor_msgs/CompressedImage compressed_image  # alternative jpeg/png input, used when image is empty
 string[] categories  # category names or referring expressions
 uint8 variant
 ---

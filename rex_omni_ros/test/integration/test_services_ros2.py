@@ -12,7 +12,12 @@ import subprocess
 
 import pytest
 
-from .util import FRAME_ID, make_bad_image_msg, make_image_msg
+from .util import (
+    FRAME_ID,
+    make_bad_image_msg,
+    make_compressed_image_msg,
+    make_image_msg,
+)
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("ROS_VERSION") != "2", reason="requires a ROS2 environment"
@@ -84,6 +89,27 @@ def test_detect(client_node):
     assert 0 < detection.bbox.y0 < detection.bbox.y1 <= 480
     assert detection.confidence == pytest.approx(1.0)
     assert response.inference_time >= 0.0
+
+
+def test_detect_with_compressed_image(client_node):
+    from rex_omni_msgs.srv import Detect
+
+    request = Detect.Request(
+        compressed_image=make_compressed_image_msg(), categories=["person"]
+    )
+    response = call(client_node, Detect, "/rex_omni/detect", request)
+    assert response.success, response.message
+    assert response.header.frame_id == FRAME_ID
+    assert [d.category for d in response.detections] == ["person"]
+
+
+def test_detect_without_any_image_reports_error(client_node):
+    from rex_omni_msgs.srv import Detect
+
+    request = Detect.Request(categories=["person"])
+    response = call(client_node, Detect, "/rex_omni/detect", request)
+    assert not response.success
+    assert "no image data" in response.message
 
 
 def test_point(client_node):
