@@ -28,6 +28,9 @@ mypy = "*"
 
 [pypi-dependencies]
 vllm = ">=0.22,<0.23"
+# transformers 5.x rebuilds the slow tokenizer with token ids beyond the
+# Rex-Omni embedding table; 4.x keeps the correct training-time layout.
+transformers = ">=4.56,<5"
 
 [tasks]
 lint = "ruff check rex_omni_ros_python"
